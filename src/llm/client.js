@@ -1,6 +1,7 @@
 import "dotenv/config";
 import OpenAI from "openai";
 import { callWithRetry } from "./retry.js";
+import { logUsage } from "./logger.js";
 
 const client = new OpenAI({
   baseURL: process.env.LLM_BASE_URL,
@@ -8,6 +9,8 @@ const client = new OpenAI({
 });
 
 async function makeLLMRequest(prompt) {
+  const startTime = Date.now();
+
   const response = await client.chat.completions.create({
     model: process.env.LLM_MODEL,
     messages: [
@@ -18,10 +21,23 @@ async function makeLLMRequest(prompt) {
     ],
   });
 
+  const latencyMs = Date.now() - startTime;
+
+  const inputTokens = response.usage?.prompt_tokens ?? 0;
+  const outputTokens = response.usage?.completion_tokens ?? 0;
+
+  await logUsage({
+    model: process.env.LLM_MODEL,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    latencyMs,
+  });
+
   return {
     content: response.choices[0].message.content,
-    inputTokens: response.usage?.prompt_tokens ?? 0,
-    outputTokens: response.usage?.completion_tokens ?? 0,
+    inputTokens,
+    outputTokens,
   };
 }
 
